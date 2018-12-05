@@ -7,8 +7,8 @@ import pprint
 import math
 
 marathon_host = input("Enter the resolvable hostname or IP of your Marathon Instance : ")
-marathon_app = raw_input("Enter the Marathon Application Name to Configure Autoscale for from the Marathon UI : ")
-autoscale_multiplier = float(raw_input("Enter Autoscale multiplier for triggered Autoscale (ie 1.5) : "))
+marathon_app = input("Enter the Marathon Application Name to Configure Autoscale for from the Marathon UI : ")
+autoscale_multiplier = float(input("Enter Autoscale multiplier for triggered Autoscale (ie 1.5) : "))
 
 
 class marathon(object):

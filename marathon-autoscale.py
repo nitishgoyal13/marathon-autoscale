@@ -1,5 +1,5 @@
 #!/usr/bin/python
-__author__ = 'lavender'
+__author__ = 'nitishgoyal13'
 
 import sys
 import requests
@@ -9,27 +9,27 @@ import time
 
 #marathon_host = input("Enter the DNS hostname or IP of your Marathon Instance : ")
 #marathon_app = input("Enter the Marathon Application Name to Configure Autoscale for from the Marathon UI : ")
-#max_mem_percent = int(input("Enter the Max percent of Mem Usage averaged across all Application Instances to trigger Autoscale out(ie. 80) : "))
-#max_cpu_time = int(input("Enter the Max percent of CPU Usage averaged across all Application Instances to trigger Autoscale out(ie. 80) : "))
+#max_request_p95_time = int(input("Enter the Max percent of Mem Usage averaged across all Application Instances to trigger Autoscale out(ie. 80) : "))
+#max_threadpool_utilization = int(input("Enter the Max percent of CPU Usage averaged across all Application Instances to trigger Autoscale out(ie. 80) : "))
 #out_trigger_mode = input("Enter which metric(s) to trigger Autoscale out('and', 'or') : ")
 #down_trigger_mode = input("Enter which metric(s) to trigger Autoscale down('and', 'or') : ")
 #autoscale_multiplier = float(input("Enter Autoscale multiplier for triggered Autoscale (ie 1.5) : "))
 #max_instances = int(input("Enter the Max instances that should ever exist for this application (ie. 20) : "))
-#min_mem_percent = int(input("Enter the Min percent of Mem Usage averaged across all Application Instances to trigger Autoscale down(ie. 40) : "))
-#min_cpu_time = int(input("Enter the Min percent of CPU Usage averaged across all Application Instances to trigger Autoscale down(ie. 40) : "))
+#min_request_p95_time = int(input("Enter the Min percent of Mem Usage averaged across all Application Instances to trigger Autoscale down(ie. 40) : "))
+#min_threadpool_utilization = int(input("Enter the Min percent of CPU Usage averaged across all Application Instances to trigger Autoscale down(ie. 40) : "))
 #min_instances = int(input("Enter the Min instances that should ever less for this application (ie. 2) : "))
 #check_sec = int(input("Enter the check second (ie. 30) : "))
 
-marathon_host = '192.168.154.210'
-marathon_app = 'tools/nginx'  #http://marathon_host:8080/v2/apps
-max_mem_percent = 70
-max_cpu_time = 70
+marathon_host = '10.84.199.144'
+marathon_app = 'foxtrot-0-5-4-6-query-67'  #http://marathon_host:8080/v2/apps
+max_request_p95_time = 0.300
+max_threadpool_utilization = 0.7
 out_trigger_mode = 'or'
 down_trigger_mode = 'or'
 autoscale_multiplier = 1.5
 max_instances = 8
-min_mem_percent = 30
-min_cpu_time = 30
+min_request_p95_time = 0.100
+min_threadpool_utilization = 0.3
 min_instances = 3
 check_sec = 30
 
@@ -63,11 +63,14 @@ class Marathon(object):
             self.appinstances = app_instances
             print(marathon_app, "has", self.appinstances, "deployed instances")
             app_task_dict={}
+            adminPort_dict={}
             for i in response['app']['tasks']:
                 taskid = i['id']
                 hostid = i['host']
-                print ('DEBUG - taskId=', taskid +' running on '+hostid)
-                app_task_dict[str(taskid)] = str(hostid)
+                adminPort = i['ports'][1]
+                print ('DEBUG - taskId=', taskid +' running on '+ hostid)
+                app_task_dict[str(taskid)] = str(hostid) + ":" + str(adminPort)
+                adminPort_dict[str(taskid)] = str(adminPort)
             return app_task_dict
 
     def scale_out_app(self,marathon_app,autoscale_multiplier):
@@ -111,6 +114,14 @@ def get_task_agentstatistics(task, host):
             task_stats = i['statistics']
             # print ('****Specific stats for task',executor_id,'=',task_stats)
             return task_stats
+
+
+def get_task_metrics(host):
+    # Get the performance Metrics for all the tasks for the Marathon App specified
+    # by connecting to the Mesos Agent and then making a REST call against Mesos statistics
+    # Return to Statistics for the specific task for the marathon_app
+    return requests.get('http://'+host + '/metrics.json').json()
+
 def timer():
     print("Successfully completed a cycle, sleeping for ",check_sec," seconds...")
     time.sleep(check_sec)
@@ -135,73 +146,58 @@ if __name__ == "__main__":
         app_task_dict = aws_marathon.get_app_details(marathon_app)
         print ("    Marathon  App 'tasks' for", marathon_app, "are=", app_task_dict)
 
-        app_cpu_values = []
-        app_mem_values = []
+        app_threadpool_values = []
+        app_request_p95_values = []
         for task,host in app_task_dict.items():
             #cpus_time =(task_stats['cpus_system_time_secs']+task_stats['cpus_user_time_secs'])
             #print ("Combined Task CPU Kernel and User Time for task", task, "=", cpus_time)
 
-            # Compute CPU usage
-            task_stats = get_task_agentstatistics(task, host)
-            cpus_system_time_secs0 = float(task_stats['cpus_system_time_secs'])
-            cpus_user_time_secs0 = float(task_stats['cpus_user_time_secs'])
-            timestamp0 = float(task_stats['timestamp'])
+            # Compute Threads Usage
+            task_metrics = get_task_metrics(host)
+            thread_pool_utilization = (task_metrics['gauges']['org.eclipse.jetty.util.thread.QueuedThreadPool.dw.utilization']['value'])
 
             time.sleep(1)
 
-            task_stats = get_task_agentstatistics(task, host)
-            cpus_system_time_secs1 = float(task_stats['cpus_system_time_secs'])
-            cpus_user_time_secs1 = float(task_stats['cpus_user_time_secs'])
-            timestamp1 = float(task_stats['timestamp'])
+            requests_p95 = (task_metrics['timers']['io.dropwizard.jetty.MutableServletContextHandler.requests']['p95'])
 
-            cpus_time_total0 = cpus_system_time_secs0 + cpus_user_time_secs0
-            cpus_time_total1 = cpus_system_time_secs1 + cpus_user_time_secs1
-            cpus_time_delta = cpus_time_total1 - cpus_time_total0
-            timestamp_delta = timestamp1 - timestamp0
+            # Thread pool percentage usage
+            app_threadpool_values.append(thread_pool_utilization)
 
-            # CPU percentage usage
-            usage = float(cpus_time_delta / timestamp_delta) * 100
+            # Requests time value
+            app_request_p95_values.append(requests_p95)
 
-            # RAM usage
-            mem_rss_bytes = int(task_stats['mem_rss_bytes'])
-            print ("task", task, "mem_rss_bytes=", mem_rss_bytes)
-            mem_limit_bytes = int(task_stats['mem_limit_bytes'])
-            print ("task", task, "mem_limit_bytes=", mem_limit_bytes)
-            mem_utilization = 100 * (float(mem_rss_bytes) / float(mem_limit_bytes))
-            print ("task", task, "mem Utilization=", mem_utilization)
+            print ("task", task, "thread_pool_utilization Utilization=", thread_pool_utilization)
+            print ("task", task, "requests_p95 Utilization=", requests_p95)
             print()
 
-            #app_cpu_values.append(cpus_time)
-            app_cpu_values.append(usage)
-            app_mem_values.append(mem_utilization)
         # Normalized data for all tasks into a single value by averaging
-        app_avg_cpu = (sum(app_cpu_values) / len(app_cpu_values))
-        print ('Current Average  CPU Time for app', marathon_app, '=', app_avg_cpu)
-        app_avg_mem=(sum(app_mem_values) / len(app_mem_values))
-        print ('Current Average Mem Utilization for app', marathon_app,'=', app_avg_mem)
+        app_avg_threadpool_utilization = (sum(app_threadpool_values) / len(app_threadpool_values))
+        print ('Current Average  CPU Time for app', marathon_app, '=', app_avg_threadpool_utilization)
+        app_avg_requests_p95_time=(sum(app_request_p95_values) / len(app_request_p95_values))
+        print ('Current Average Mem Utilization for app', marathon_app,'=', app_avg_requests_p95_time)
         #Evaluate whether an autoscale trigger is called for
         print('\n')
         if (out_trigger_mode == "and"):
-            if (app_avg_cpu > max_cpu_time) and (app_avg_mem > max_mem_percent):
+            if (app_avg_threadpool_utilization > max_threadpool_utilization) and (app_avg_requests_p95_time > max_request_p95_time):
                 print ("Autoscale out triggered based on 'both' Mem & CPU exceeding threshold")
                 aws_marathon.scale_out_app(marathon_app, autoscale_multiplier)
             else:
                 print ("Both values were not greater than autoscale up targets")
         elif (out_trigger_mode == "or"):
-            if (app_avg_cpu > max_cpu_time) or (app_avg_mem > max_mem_percent):
+            if (app_avg_threadpool_utilization > max_threadpool_utilization) or (app_avg_requests_p95_time > max_request_p95_time):
                 print ("Autoscale out triggered based Mem 'or' CPU exceeding threshold")
                 aws_marathon.scale_out_app(marathon_app, autoscale_multiplier)
             else:
                 print ("Neither Mem 'or' CPU values exceeding threshold")
         
         if (down_trigger_mode == "and"):
-            if (app_avg_cpu < min_cpu_time) and (app_avg_mem < min_mem_percent):
+            if (app_avg_threadpool_utilization < min_threadpool_utilization) and (app_avg_requests_p95_time < min_request_p95_time):
                 print ("Autoscale out triggered based Mem 'or' CPU exceeding threshold")
                 aws_marathon.scale_down_app(marathon_app, autoscale_multiplier)
             else:
                 print ("Neither Mem 'or' CPU values exceeding threshold")
         elif(down_trigger_mode == "or"):
-            if (app_avg_cpu < min_cpu_time) or (app_avg_mem < min_mem_percent):
+            if (app_avg_threadpool_utilization < min_threadpool_utilization) or (app_avg_requests_p95_time < min_request_p95_time):
                 print ("Autoscale out triggered based Mem 'or' CPU exceeding threshold")
                 aws_marathon.scale_down_app(marathon_app, autoscale_multiplier)
             else:

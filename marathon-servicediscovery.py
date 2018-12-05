@@ -8,8 +8,8 @@ import time
 
 marathon_host = input("Enter the DNS hostname or IP of your Marathon Instance : ")
 marathon_app = input("Enter the Marathon Application Name to Configure Autoscale for from the Marathon UI : ")
-max_mem_percent = int(input("Enter the Max percent of Mem Usage averaged across all Application Instances to trigger Autoscale (ie. 80) : "))
-max_cpu_time = int(input("Enter the Max percent of CPU Usage averaged across all Application Instances to trigger Autoscale (ie. 80) : "))
+max_request_p95_time = int(input("Enter the Max percent of Mem Usage averaged across all Application Instances to trigger Autoscale (ie. 80) : "))
+max_threadpool_utilization = int(input("Enter the Max percent of CPU Usage averaged across all Application Instances to trigger Autoscale (ie. 80) : "))
 trigger_mode = input("Enter which metric(s) to trigger Autoscale ('and', 'or') : ")
 autoscale_multiplier = float(input("Enter Autoscale multiplier for triggered Autoscale (ie 1.5) : "))
 max_instances = int(input("Enter the Max instances that should ever exist for this application (ie. 20) : "))
@@ -117,14 +117,14 @@ if __name__ == "__main__":
             app_cpu_values.append(cpus_time)
             app_mem_values.append(mem_utilization)
         # Normalized data for all tasks into a single value by averaging
-        app_avg_cpu = (sum(app_cpu_values) / len(app_cpu_values))
-        print ('Current Average  CPU Time for app', marathon_app,'=', app_avg_cpu)
-        app_avg_mem=(sum(app_mem_values) / len(app_mem_values))
-        print ('Current Average Mem Utilization for app', marathon_app,'=', app_avg_mem)
+        app_avg_threadpool_utilization = (sum(app_cpu_values) / len(app_cpu_values))
+        print ('Current Average  CPU Time for app', marathon_app,'=', app_avg_threadpool_utilization)
+        app_avg_requests_p95_time=(sum(app_mem_values) / len(app_mem_values))
+        print ('Current Average Mem Utilization for app', marathon_app,'=', app_avg_requests_p95_time)
         #Evaluate whether an autoscale trigger is called for
         print('\n')
         if (trigger_mode=="and"):
-            if (app_avg_cpu > max_cpu_time) and (app_avg_mem > max_mem_percent):
+            if (app_avg_threadpool_utilization > max_threadpool_utilization) and (app_avg_requests_p95_time > max_request_p95_time):
                 print ("Autoscale triggered based on 'both' Mem & CPU exceeding threshold")
                 aws_marathon.scale_app(marathon_app,autoscale_multiplier)
                 timer()
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                 print ("Both values were not greater than autoscale targets")
                 timer()
         elif (trigger_mode=="or"):
-            if (app_avg_cpu > max_cpu_time) or (app_avg_mem > max_mem_percent):
+            if (app_avg_threadpool_utilization > max_threadpool_utilization) or (app_avg_requests_p95_time > max_request_p95_time):
                 print ("Autoscale triggered based Mem 'or' CPU exceeding threshold")
                 aws_marathon.scale_app(marathon_app,autoscale_multiplier)
                 timer()

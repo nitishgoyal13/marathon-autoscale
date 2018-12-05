@@ -1,5 +1,5 @@
 # marathon-autoscale
-Simple Proof of Concept application for Scaling Application running on Marathon and Mesos based on Application's based on the utilization metrics Mesos reports. Note: This trigger metrics can be changed to be network related in order to have a more accurate representation of utilization that requires scaling. The application runs on any system that has Python 3 installed and has access to the Marathon server via HTTP TCP Port 80 and the Mesos Agent nodes over TCP port 5051. marathon-autoscale.py is intended to demonstrate what is possible when you run your applications on Marathon and Mesos. It periodically monitors the aggregate CPU and memory utilization for all the individual tasks running on the Mesos Agents that make up the specified Marathon application. When the threshold you set for these metrics is reached, marathon-autoscale.py will add instances to the application based on the multiplier you specify.
+Simple Proof of Concept application for Scaling Application running on Marathon and Mesos based on Application's based on the utilization metrics Mesos reports. Note: This trigger metrics can be changed to be network related in order to have a more accurate representation of utilization that requires scaling. The application runs on any system that has Python 3 installed and has access to the Marathon server via HTTP TCP Port 80 and the Mesos Agent nodes over TCP port 5051. marathon-autoscale.py is intended to demonstrate what is possible when you run your applications on Marathon and Mesos. It periodically monitors the aggregate CPU and Thread Poolory utilization for all the individual tasks running on the Mesos Agents that make up the specified Marathon application. When the threshold you set for these metrics is reached, marathon-autoscale.py will add instances to the application based on the multiplier you specify.
 
 ## Objective
 To provide a simple AutoScale Automation example running on top of DCOS and Marathon.
@@ -20,8 +20,8 @@ Input paramters user will be prompted for
 
 	--marathon_host (string) - FQDN or IP of the Marathon host (without the http://).
 	--marathon_app (string) - Name of the Marathon App without the "/" to configure autoscale on.
-	--max_mem_percent (int) - Trigger percentage of Avg Mem Utilization across all tasks for the target Marathon App before scaleout is triggered.
-	--max_cpu_time (int) - Trigger Avg CPU time across all tasks for the target Marathon App before scaleout is triggered.
+	--max_request_p95_time (int) - Trigger percentage of Avg Mem Utilization across all tasks for the target Marathon App before scaleout is triggered.
+	--max_threadpool_utilization (int) - Trigger Avg CPU time across all tasks for the target Marathon App before scaleout is triggered.
 	--trigger_mode (string) - 'both' or 'and' determines whether both cpu and mem must be triggered or just one or the other.
 	--autoscale_multiplier (float) - The number that current instances will be multiplied against to decide how many instances to add during a scaleout operation.
 	--max_instances (int) - The Ceiling for number of instances to stop scaling out EVEN if thresholds are crossed.
